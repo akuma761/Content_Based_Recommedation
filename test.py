@@ -20,6 +20,7 @@ import pickle
 from keras.models import Sequential
 from sklearn.neighbors import NearestNeighbors
 import cv2
+import matplotlib.pyplot as plt 
 
 
 feature_list = np.array(pickle.load(open('embeddings.pkl', 'rb')))
@@ -45,7 +46,7 @@ model.add(GlobalMaxPooling2D())
 
 #==============================================================================================
 # EXRACTING 1-D FEATURES OF A TEST IMAGE
-img = image.load_img('./test/1529.jpg', target_size = (224, 224))
+img = image.load_img('./test/19933.jpg', target_size = (224, 224))
 img_array = image.img_to_array(img)
 img_array.shape
 print(img_array)
@@ -79,19 +80,10 @@ indices = indices[0][1:6]
 
 print(indices)
 
-for file in indices:
-    temp_img = cv2.imread(filenames[file])
-    cv2.imshow('output', temp_img)
-    cv2.waitKey(0)
 
-
-
-
-
-
-
-
-
-
-
-
+for i in range (0, len(indices)):
+    temp_img = cv2.imread(filenames[indices[i]])
+    plt.imshow(cv2.cvtColor(temp_img, cv2.COLOR_BGR2RGB))
+    plt.show()
+    
+    
