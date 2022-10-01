@@ -28,7 +28,7 @@ ResNet-50 is a convolutional neural network that is 50 layers deep. One can load
 ## Input 2
 
 <p align="center">
-   <img src="img/cnn3.png">
+   <img src="img/cnn3.jpg">
 </p>
 
 ## Output 2
