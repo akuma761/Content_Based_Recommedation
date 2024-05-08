@@ -7,6 +7,9 @@ Created on Sun Feb  6 14:15:52 2022
 """
 
 import tensorflow
+import io
+from io import BytesIO
+from PIL import Image, ImageFile
 from tensorflow.keras.preprocessing import image
 from tensorflow.keras.layers import GlobalMaxPooling2D
 from tensorflow.keras.applications.resnet50 import ResNet50, preprocess_input
@@ -63,7 +66,14 @@ norm_pred = pred/norm(pred)
 '''
 
 def extract_features(img_path, model):
-    img = image.load_img(img_path,target_size=(224,224))
+    byteImgIO = io.BytesIO()
+    byteImg = Image.open(img_path)
+    byteImg.save(byteImgIO, "PNG")
+    byteImgIO.seek(0)
+    byteImg = byteImgIO.read()
+    dataBytesIO = io.BytesIO(byteImg)
+    Image.open(dataBytesIO)
+    img = image.load_img(dataBytesIO,target_size=(224,224))
     img_array = image.img_to_array(img)
     expanded_img_array = np.expand_dims(img_array, axis=0)
     preprocessed_img = preprocess_input(expanded_img_array)
@@ -73,11 +83,13 @@ def extract_features(img_path, model):
     return normalized_result
 
 # Get ALL file names from Image Folder
-print(os.listdir('images'))
+print(os.listdir('img'))
 
 filenames = []
-for file in os.listdir('images'):
-    filenames.append(os.path.join('images',file))
+for file in os.listdir('img'):
+    filenames.append(os.path.join('img', file))
+
+print('This is', file)
 
 # Append All one dimension (2048X1) to feature list of all IMAGES
 feature_list = []
