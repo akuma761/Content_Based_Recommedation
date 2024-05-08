@@ -46,7 +46,7 @@ model.add(GlobalMaxPooling2D())
 
 #==============================================================================================
 # EXRACTING 1-D FEATURES OF A TEST IMAGE
-img = image.load_img('./test/19933.jpg', target_size = (224, 224))
+img = image.load_img('img', target_size = (224, 224))
 img_array = image.img_to_array(img)
 img_array.shape
 print(img_array)
@@ -60,23 +60,32 @@ expanded_img.shape
 processed_img = preprocess_input(expanded_img)
 
 # now using RESNET to get prediction on a given Image
-pred = model.predict(processed_img)
-pred.shape
+pred1 = model.predict(processed_img)
+print(pred1.shape)
 
-pred = pred.flatten()
-pred.shape
+pred = pred1.flatten()
+print(pred.shape)
 
 norm_pred = pred/norm(pred)
 
 
 #=================NEAREST NEIGHBOUR ALGORITHM================================================
 
-neighbors = NearestNeighbors(n_neighbors=6,algorithm='brute',metric='euclidean')
-neighbors.fit(feature_list)
+# neighbors = NearestNeighbors(n_neighbors=6,algorithm='brute',metric='euclidean')
+# neighbors.fit(feature_list)
 
-distances, indices = neighbors.kneighbors([norm_pred])
+# distances, indices = neighbors.kneighbors([norm_pred])
+# #distances, indices = neighbors.kneighbors([norm_pred])
 
-indices = indices[0][1:6]
+# indices = indices[0][1:6]
+
+from sklearn.metrics.pairwise import cosine_similarity
+
+# Calculate similarities
+similarities = cosine_similarity([norm_pred], feature_list)
+
+# Get indices of the most similar items
+indices = np.argsort(-similarities[0])[:6]
 
 print(indices)
 
