@@ -19,6 +19,30 @@ import os
 from tqdm import tqdm
 import pickle
 from keras.models import Sequential
+from store_image_s3 import create_bucket
+from store_image_s3 import extract_image
+import shutil
+import subprocess
+import sagemaker
+import boto3
+from sagemaker import image_uris
+from sagemaker_deploy import create_image_uri
+from sagemaker_deploy import define_endpoint
+
+sess = sagemaker.Session()
+region = sess.boto_region_name
+bucket = sess.default_bucket()
+
+image_uri = create_image_uri()
+
+client = boto3.client(service_name='sagemaker')
+runtime = boto3.client(service_name='sagemaker-runtime')
+
+bucket_name = 'resnetbucketsagemaker-amits'
+folder = 'sagemaker/content_recommendation'
+
+
+create_bucket(bucket_name)
 
 
 # we will use Image Net weights and Add our custom top Layer
@@ -37,6 +61,56 @@ model.add(GlobalMaxPooling2D())
 
 # after prinitng summary we see that there are ZERO Trainable Parameters
 print(model.summary())
+
+
+def load_save_resnet50_model(model_path):
+    resnet50 = ResNet50(weights='imagenet', include_top=False, input_shape=(224,224,3))
+    resnet50.trainable = False
+    shutil.rmtree(model_path, ignore_errors=True)
+    model = Sequential()
+    model.add(resnet50)
+    model.add(GlobalMaxPooling2D())
+    model.save(model_path + '.h5', include_optimizer=False)
+
+saved_model_dir = 'resnet50_saved_model' 
+model_ver = '1'
+model_path = os.path.join(saved_model_dir, model_ver)
+
+load_save_resnet50_model(model_path)
+
+shutil.rmtree('model.tar.gz', ignore_errors=True)
+# Define the command as a string
+command = "tar cvfz model.tar.gz code -C resnet50_saved_model"
+
+# Run the command
+try:
+    subprocess.run(command, check=True, shell=True)
+    print("Archive created successfully.")
+except subprocess.CalledProcessError:
+    print("Error occurred while creating the archive.")
+
+prefix = 'keras_models_serverless'
+s3_model_path = sess.upload_data(path='model.tar.gz', key_prefix=prefix)
+
+
+from time import gmtime, strftime
+
+model_name = 'keras-serverless' + strftime("%Y-%m-%d-%H-%M-%S", gmtime())
+print('Model name: ' + model_name)
+
+create_model_response = client.create_model(
+    ModelName = model_name,
+    Containers=[{
+        "Image": image_uri,
+        "Mode": "SingleModel",
+        "ModelDataUrl": s3_model_path,
+    }],
+    ExecutionRoleArn ="arn:aws:iam::654654196449:role/service-role/AmazonSageMaker-ExecutionRole-20240504T172417"
+)
+
+print("Model Arn: " + create_model_response['ModelArn'])
+
+
 
 '''
 # EXRACTING 1-D FEATURES OF A SINGLE IMAGE
@@ -67,7 +141,8 @@ norm_pred = pred/norm(pred)
 
 def extract_features(img_path, model):
     byteImgIO = io.BytesIO()
-    byteImg = Image.open(img_path)
+    byteImg = Image.open(io.BytesIO(img_path))
+    #byteImg = Image.open(img_path)
     byteImg.save(byteImgIO, "PNG")
     byteImgIO.seek(0)
     byteImg = byteImgIO.read()
@@ -82,21 +157,21 @@ def extract_features(img_path, model):
 
     return normalized_result
 
-# Get ALL file names from Image Folder
-print(os.listdir('img'))
+# # Get ALL file names from Image Folder
+# print(os.listdir('img'))
 
-filenames = []
-for file in os.listdir('img'):
-    filenames.append(os.path.join('img', file))
+# filenames = []
+# for file in os.listdir('img'):
+#     filenames.append(os.path.join('img', file))
 
-print('This is', file)
-
+# print('This is', file)
+images = extract_image(bucket_name, folder)
 # Append All one dimension (2048X1) to feature list of all IMAGES
 feature_list = []
-for file in tqdm(filenames):
-    feature_list.append(extract_features(file, model))
+for image_file in tqdm(images):
+    feature_list.append(extract_features(image_file, model))
+
+define_endpoint(model_name)
 
 pickle.dump(feature_list, open('embeddings.pkl','wb'))
-pickle.dump(filenames, open('filenames.pkl','wb'))
-
-
+pickle.dump(images, open('images.pkl','wb'))

@@ -21,11 +21,14 @@ from keras.models import Sequential
 from sklearn.neighbors import NearestNeighbors
 import cv2
 import matplotlib.pyplot as plt 
+from PIL import Image
+import io
 
 
 feature_list = np.array(pickle.load(open('embeddings.pkl', 'rb')))
 
-filenames = pickle.load(open('filenames.pkl', 'rb'))
+images = pickle.load(open('images.pkl', 'rb'))
+print(type(images))
 
 print(feature_list.shape)
 
@@ -46,7 +49,7 @@ model.add(GlobalMaxPooling2D())
 
 #==============================================================================================
 # EXRACTING 1-D FEATURES OF A TEST IMAGE
-img = image.load_img('img', target_size = (224, 224))
+img = image.load_img("C:\\Users\\amit_\\Downloads\\Desktop\\blackt.jpg", target_size = (224, 224))
 img_array = image.img_to_array(img)
 img_array.shape
 print(img_array)
@@ -90,9 +93,16 @@ indices = np.argsort(-similarities[0])[:6]
 print(indices)
 
 
-for i in range (0, len(indices)):
-    temp_img = cv2.imread(filenames[indices[i]])
-    plt.imshow(cv2.cvtColor(temp_img, cv2.COLOR_BGR2RGB))
-    plt.show()
+if len(images) >= max(indices):
+    for i in indices:
+        image_data = images[i]  # Access the image by index
+        image = Image.open(io.BytesIO(image_data))
+        image.show()  # This will display the image if you are in an environment that supports it
+else:
+    print("Insufficient data available.")
+# for i in range (0, len(indices)):
+#     temp_img = cv2.imread(images[indices[i]])
+#     plt.imshow(cv2.cvtColor(temp_img, cv2.COLOR_BGR2RGB))
+#     plt.show()
     
     

@@ -1,0 +1,8 @@
+sagemaker
+tensorflow
+keras
+pandas
+numpy
+tqdm
+boto3
+pickle
