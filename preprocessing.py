@@ -6,7 +6,7 @@ Created on Sun Feb  6 14:15:52 2022
 @author: abdul
 """
 
-import tensorflow
+import tensorflow as tf
 import io
 from io import BytesIO
 from PIL import Image, ImageFile
@@ -26,14 +26,17 @@ import subprocess
 import sagemaker
 import boto3
 from sagemaker import image_uris
-from sagemaker_deploy import create_image_uri
-from sagemaker_deploy import define_endpoint
+#from sagemaker_deploy import create_image_uri
+#from sagemaker_deploy import define_endpoint
+import tarfile
+from time import gmtime, strftime
+
 
 sess = sagemaker.Session()
 region = sess.boto_region_name
 bucket = sess.default_bucket()
 
-image_uri = create_image_uri()
+#image_uri = create_image_uri()
 
 client = boto3.client(service_name='sagemaker')
 runtime = boto3.client(service_name='sagemaker-runtime')
@@ -62,53 +65,58 @@ model.add(GlobalMaxPooling2D())
 # after prinitng summary we see that there are ZERO Trainable Parameters
 print(model.summary())
 
+# model_name='mymodel_keras'
+# model_path = 'encoder_model/{}/00000001'.format(model_name)
+# import os
 
-def load_save_resnet50_model(model_path):
-    resnet50 = ResNet50(weights='imagenet', include_top=False, input_shape=(224,224,3))
-    resnet50.trainable = False
-    shutil.rmtree(model_path, ignore_errors=True)
-    model = Sequential()
-    model.add(resnet50)
-    model.add(GlobalMaxPooling2D())
-    model.save(model_path + '.h5', include_optimizer=False)
-
-saved_model_dir = 'resnet50_saved_model' 
-model_ver = '1'
-model_path = os.path.join(saved_model_dir, model_ver)
-
-load_save_resnet50_model(model_path)
-
-shutil.rmtree('model.tar.gz', ignore_errors=True)
-# Define the command as a string
-command = "tar cvfz model.tar.gz code -C resnet50_saved_model"
-
-# Run the command
-try:
-    subprocess.run(command, check=True, shell=True)
-    print("Archive created successfully.")
-except subprocess.CalledProcessError:
-    print("Error occurred while creating the archive.")
-
-prefix = 'keras_models_serverless'
-s3_model_path = sess.upload_data(path='model.tar.gz', key_prefix=prefix)
+# # Create the directory structure if it doesn't exist
+# os.makedirs(model_path, exist_ok=True)
 
 
-from time import gmtime, strftime
+# def load_save_resnet50_model(model_path):
+#     # Make sure the base directory exists
+#     os.makedirs(model_path, exist_ok=True)
+    
+#     # Load the ResNet50 model
+#     resnet50 = ResNet50(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+#     resnet50.trainable = False
+    
+#     # Create a Sequential model and add layers
+#     model = Sequential()
+#     model.add(resnet50)
+#     model.add(GlobalMaxPooling2D())
 
-model_name = 'keras-serverless' + strftime("%Y-%m-%d-%H-%M-%S", gmtime())
-print('Model name: ' + model_name)
+#     # Save the model using TensorFlow's direct method
+#     tf.saved_model.save(model, model_path)
 
-create_model_response = client.create_model(
-    ModelName = model_name,
-    Containers=[{
-        "Image": image_uri,
-        "Mode": "SingleModel",
-        "ModelDataUrl": s3_model_path,
-    }],
-    ExecutionRoleArn ="arn:aws:iam::654654196449:role/service-role/AmazonSageMaker-ExecutionRole-20240504T172417"
-)
+# # Define the model path
+# model_name = 'mymodel'
+# model_version = '00000001'  # Use a version directory compliant with TensorFlow Serving
+# model_path = os.path.join('export', model_name, model_version)
 
-print("Model Arn: " + create_model_response['ModelArn'])
+# # Save the model
+# load_save_resnet50_model(model_path)
+
+
+# shutil.rmtree('model.tar.gz', ignore_errors=True)
+# # Define the command as a string
+
+
+# import os
+# import tarfile
+
+# path = r'export\mymodel\00000001'
+# arcname = 'saved_model.pb'
+
+# # Check if the path exists
+# if os.path.exists(path):
+#     with tarfile.open('model.tar.gz', 'w:gz') as tar:
+#         tar.add(path, arcname=arcname)
+# else:
+#     print("The specified path does not exist.")
+
+# prefix = 'keras_models_serverless'
+# s3_model_path = sess.upload_data(path='model.tar.gz', key_prefix=prefix)
 
 
 
@@ -171,7 +179,20 @@ feature_list = []
 for image_file in tqdm(images):
     feature_list.append(extract_features(image_file, model))
 
-define_endpoint(model_name)
 
 pickle.dump(feature_list, open('embeddings.pkl','wb'))
 pickle.dump(images, open('images.pkl','wb'))
+
+if os.path.exists('embeddings.pkl') and os.path.exists('images.pkl'):
+    with tarfile.open('model.tar.gz', 'w:gz') as tar:
+        # Add .pkl files to the tar.gz archive
+        tar.add('embeddings.pkl', arcname='embeddings.pkl')
+        tar.add('images.pkl', arcname='images.pkl')
+else:
+    print("One or more of the specified files do not exist.")
+
+prefix = 'keras_models_serverless'
+s3_model_path = sess.upload_data(path='model.tar.gz', key_prefix=prefix)
+
+
+#define_endpoint(s3_model_path)
