@@ -4,6 +4,13 @@ import boto3
 import tqdm
 import pickle
 from tqdm import tqdm
+import io
+import numpy as np
+from io import BytesIO
+from PIL import Image, ImageFile
+from tensorflow.keras.preprocessing import image
+from tensorflow.keras.layers import GlobalMaxPooling2D
+from tensorflow.keras.applications.resnet50 import ResNet50, preprocess_input
 
 
 
@@ -33,24 +40,20 @@ create_bucket(bucket_name)
 role = "arn:aws:iam::654654196449:role/service-role/AmazonSageMaker-ExecutionRole-20240504T172417"
 FRAMEWORK_VERSION = '2.3.0'  # Specify your TensorFlow version
 
-# Create a TensorFlow Estimator
+# Create TensorFlow estimator
 tf_estimator = TensorFlow(
     entry_point='script.py',
     role=role,
     instance_count=1,
     instance_type='ml.m5.large',
-    framework_version=FRAMEWORK_VERSION,
-    py_version='py37',  # Match this with your Python version
+    framework_version='2.3.0',
+    py_version='py37',
     script_mode=True,
     base_job_name='resnet50-tensorflow',
-    hyperparameters={
-        'weights': 'imagenet',   # Assuming your script.py can accept this parameter
-        'include_top': False,    # Assuming your script.py can accept this parameter
-        # Add other hyperparameters if needed
-    },
+    hyperparameters={'weights': 'imagenet', 'include_top': False,'epochs': 10 },
     use_spot_instances=True,
-    max_wait=7200,  # Maximum waiting time for a spot instance
-    max_run=3600    # Maximum runtime in seconds
+    max_wait=7200,
+    max_run=3600
 )
 
 tf_estimator.hyperparameters()
@@ -60,12 +63,35 @@ tf_estimator.hyperparameters()
 # print('This is', file)
 images = extract_image(bucket_name, folder)
 # Append All one dimension (2048X1) to feature list of all IMAGES
-feature_list = []
-for image_file in tqdm(images):
-    feature_list.append(extract_features(image_file, tf_estimator))
+def process_image(img_path):
+    byteImgIO = io.BytesIO()
+    byteImg = Image.open(io.BytesIO(img_path))
+    #byteImg = Image.open(img_path)
+    byteImg.save(byteImgIO, "PNG")
+    byteImgIO.seek(0)
+    byteImg = byteImgIO.read()
+    dataBytesIO = io.BytesIO(byteImg)
+    Image.open(dataBytesIO)
+    img = image.load_img(dataBytesIO,target_size=(224,224))
+    img_array = image.img_to_array(img)
+    expanded_img_array = np.expand_dims(img_array, axis=0)
+    preprocessed_img = preprocess_input(expanded_img_array) 
+    return preprocessed_img
 
-pickle.dump(feature_list, open('embeddings.pkl','wb'))
-pickle.dump(images, open('images.pkl','wb'))
+def fit_model(img_paths, model):
+    """Fit the model using a list of image paths and corresponding labels."""
+    images = np.vstack([process_image(img_paths)])
+    labels = np.array([1])
+    model.fit(images, labels)
+
+images = extract_image(bucket_name, folder)
+ 
+
+for image_file in tqdm(images):
+    fit_model(image_file, tf_estimator)
+
+# pickle.dump(feature_list, open('embeddings.pkl','wb'))
+# pickle.dump(images, open('images.pkl','wb'))
 # launch training job, with asynchronous call
 # tf_estimator.fit({"train": trainpath, "test": testpath}, wait=True)
 # sklearn_estimator.fit({"train": datapath}, wait=True)
